@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import * as loanService from '../services/loanService';
 
 // Create the Loan Context
 const LoanContext = createContext();
@@ -16,79 +17,28 @@ export function LoanProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [pendingApprovals, setPendingApprovals] = useState([]);
 
-  // Mock loan data
-  const mockLoans = [
-    {
-      id: '1',
-      userId: '123',
-      type: 'Personal',
-      amount: 10000,
-      term: 12,
-      interestRate: 5.5,
-      status: 'Approved',
-      createdAt: '2023-01-15',
-      approvedAt: '2023-01-20',
-      purpose: 'Home Renovation',
-      payments: [
-        { id: 'p1', amount: 879.16, date: '2023-02-20', status: 'Paid' },
-        { id: 'p2', amount: 879.16, date: '2023-03-20', status: 'Paid' },
-        { id: 'p3', amount: 879.16, date: '2023-04-20', status: 'Upcoming' }
-      ]
-    },
-    {
-      id: '2',
-      userId: '123',
-      type: 'Business',
-      amount: 25000,
-      term: 36,
-      interestRate: 7.2,
-      status: 'Pending',
-      createdAt: '2023-05-10',
-      purpose: 'Inventory Purchase',
-      payments: []
-    }
-  ];
-
-  const mockPendingApprovals = [
-    {
-      id: '3',
-      userId: '456',
-      userName: 'Jane Smith',
-      type: 'Mortgage',
-      amount: 250000,
-      term: 360,
-      interestRate: 4.5,
-      status: 'Pending',
-      createdAt: '2023-05-05',
-      purpose: 'Home Purchase',
-      creditScore: 720,
-      income: 85000,
-      documents: ['proof_of_income.pdf', 'bank_statements.pdf']
-    },
-    {
-      id: '4',
-      userId: '789',
-      userName: 'Bob Johnson',
-      type: 'Student',
-      amount: 15000,
-      term: 60,
-      interestRate: 3.8,
-      status: 'Pending',
-      createdAt: '2023-05-08',
-      purpose: 'Tuition',
-      creditScore: 680,
-      income: 35000,
-      documents: ['enrollment_verification.pdf', 'financial_aid_letter.pdf']
-    }
-  ];
-
   // Load loans when user changes
   useEffect(() => {
     if (currentUser) {
       // Simulate API call to get user's loans
       setTimeout(() => {
-        setLoans(mockLoans);
-        setPendingApprovals(mockPendingApprovals);
+        // Add mock data for first-time users
+        if (localStorage.getItem('firstTimeLoad') !== 'false') {
+          loanService.addMockData();
+          localStorage.setItem('firstTimeLoad', 'false');
+        }
+        
+        // Get user's loans
+        const userLoans = loanService.getUserLoans(currentUser.id);
+        setLoans(userLoans);
+        
+        // If user is admin, get pending approvals
+        if (currentUser.role === 'admin') {
+          const approvals = loanService.getPendingApprovals();
+          setPendingApprovals(approvals);
+          console.log("Admin loaded pending approvals:", approvals);
+        }
+        
         setLoading(false);
       }, 1000);
     } else {
@@ -103,17 +53,25 @@ export function LoanProvider({ children }) {
     // Simulate API call
     return new Promise((resolve) => {
       setTimeout(() => {
-        const newLoan = {
-          id: Date.now().toString(),
-          userId: currentUser.id,
-          status: 'Pending',
-          createdAt: new Date().toISOString().split('T')[0],
-          payments: [],
-          ...loanData
-        };
-        
-        setLoans([...loans, newLoan]);
-        resolve(newLoan);
+        try {
+          // Use the loan service to apply for a loan
+          const newLoan = loanService.applyForLoan(loanData, currentUser);
+          
+          // Update local state
+          setLoans([...loans, newLoan]);
+          
+          // If user is admin, update pending approvals too
+          if (currentUser.role === 'admin') {
+            const approvals = loanService.getPendingApprovals();
+            setPendingApprovals(approvals);
+          }
+          
+          console.log("Applied for new loan:", newLoan);
+          resolve(newLoan);
+        } catch (error) {
+          console.error("Error applying for loan:", error);
+          throw error;
+        }
       }, 1000);
     });
   };
@@ -121,23 +79,21 @@ export function LoanProvider({ children }) {
   // Approve a loan (admin only)
   const approveLoan = async (loanId) => {
     // Simulate API call
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       setTimeout(() => {
-        // Find the loan in pending approvals
-        const loanIndex = pendingApprovals.findIndex(loan => loan.id === loanId);
-        if (loanIndex !== -1) {
-          const approvedLoan = {
-            ...pendingApprovals[loanIndex],
-            status: 'Approved',
-            approvedAt: new Date().toISOString().split('T')[0]
-          };
+        try {
+          // Use the loan service to approve the loan
+          const approvedLoan = loanService.approveLoan(loanId, currentUser);
           
-          // Remove from pending approvals
-          const newPendingApprovals = [...pendingApprovals];
-          newPendingApprovals.splice(loanIndex, 1);
+          // Update local state
+          const newPendingApprovals = pendingApprovals.filter(loan => loan.id !== loanId);
           setPendingApprovals(newPendingApprovals);
           
+          console.log("Approved loan:", approvedLoan);
           resolve(approvedLoan);
+        } catch (error) {
+          console.error("Error approving loan:", error);
+          reject(error);
         }
       }, 1000);
     });
@@ -146,23 +102,21 @@ export function LoanProvider({ children }) {
   // Reject a loan (admin only)
   const rejectLoan = async (loanId) => {
     // Simulate API call
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       setTimeout(() => {
-        // Find the loan in pending approvals
-        const loanIndex = pendingApprovals.findIndex(loan => loan.id === loanId);
-        if (loanIndex !== -1) {
-          const rejectedLoan = {
-            ...pendingApprovals[loanIndex],
-            status: 'Rejected',
-            rejectedAt: new Date().toISOString().split('T')[0]
-          };
+        try {
+          // Use the loan service to reject the loan
+          const rejectedLoan = loanService.rejectLoan(loanId, currentUser);
           
-          // Remove from pending approvals
-          const newPendingApprovals = [...pendingApprovals];
-          newPendingApprovals.splice(loanIndex, 1);
+          // Update local state
+          const newPendingApprovals = pendingApprovals.filter(loan => loan.id !== loanId);
           setPendingApprovals(newPendingApprovals);
           
+          console.log("Rejected loan:", rejectedLoan);
           resolve(rejectedLoan);
+        } catch (error) {
+          console.error("Error rejecting loan:", error);
+          reject(error);
         }
       }, 1000);
     });
@@ -171,29 +125,21 @@ export function LoanProvider({ children }) {
   // Make a payment
   const makePayment = async (loanId, paymentAmount) => {
     // Simulate API call
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       setTimeout(() => {
-        // Find the loan
-        const loanIndex = loans.findIndex(loan => loan.id === loanId);
-        if (loanIndex !== -1) {
-          const updatedLoan = { ...loans[loanIndex] };
+        try {
+          // Use the loan service to make a payment
+          const payment = loanService.makePayment(loanId, paymentAmount, currentUser.id);
           
-          // Add payment
-          const newPayment = {
-            id: `p${Date.now()}`,
-            amount: paymentAmount,
-            date: new Date().toISOString().split('T')[0],
-            status: 'Paid'
-          };
+          // Update local state
+          const updatedLoans = loanService.getUserLoans(currentUser.id);
+          setLoans(updatedLoans);
           
-          updatedLoan.payments = [...updatedLoan.payments, newPayment];
-          
-          // Update loans array
-          const newLoans = [...loans];
-          newLoans[loanIndex] = updatedLoan;
-          setLoans(newLoans);
-          
-          resolve(newPayment);
+          console.log("Made payment:", payment);
+          resolve(payment);
+        } catch (error) {
+          console.error("Error making payment:", error);
+          reject(error);
         }
       }, 1000);
     });
@@ -201,9 +147,19 @@ export function LoanProvider({ children }) {
 
   // Get a single loan by ID
   const getLoanById = (loanId) => {
-    return loans.find(loan => loan.id === loanId);
+    return loanService.getLoanById(loanId, currentUser?.id);
   };
 
+  // Refresh pending approvals (for admins)
+  const refreshPendingApprovals = () => {
+    if (currentUser?.role === 'admin') {
+      const approvals = loanService.getPendingApprovals();
+      setPendingApprovals(approvals);
+      return approvals;
+    }
+    return [];
+  };
+  
   // Context value
   const value = {
     loans,
@@ -213,7 +169,8 @@ export function LoanProvider({ children }) {
     approveLoan,
     rejectLoan,
     makePayment,
-    getLoanById
+    getLoanById,
+    refreshPendingApprovals
   };
 
   return (

@@ -22,9 +22,12 @@ export function AuthProvider({ children }) {
         // For demo purposes, any email with admin will be an admin user
         const admin = email.includes('admin');
         
+        // Generate a unique ID based on the email
+        const userId = admin ? 'admin-' + Date.now() : 'user-' + Date.now();
+        
         // Store user in localStorage for persistence
         const user = { 
-          id: '123', 
+          id: userId, 
           email, 
           name: admin ? 'Admin User' : 'Regular User',
           role: admin ? 'admin' : 'user'
@@ -43,8 +46,11 @@ export function AuthProvider({ children }) {
     // Simulate API call
     return new Promise((resolve, reject) => {
       setTimeout(() => {
+        // Generate a unique ID for the new user
+        const userId = 'user-' + Date.now();
+        
         const user = { 
-          id: '123', 
+          id: userId, 
           email, 
           name,
           role: 'user'

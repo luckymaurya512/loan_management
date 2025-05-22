@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLoan } from '../../contexts/LoanContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   CheckIcon, 
   XIcon, 
@@ -13,7 +14,8 @@ import {
 import { Dialog, Transition } from '@headlessui/react';
 
 const AdminApprovals = () => {
-  const { pendingApprovals, approveLoan, rejectLoan, loading } = useLoan();
+  const { pendingApprovals, approveLoan, rejectLoan, loading, refreshPendingApprovals } = useLoan();
+  const { currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [loanTypeFilter, setLoanTypeFilter] = useState('all');
   const [sortField, setSortField] = useState('createdAt');
@@ -62,7 +64,7 @@ const AdminApprovals = () => {
       setSuccess('Loan approved successfully!');
       setIsDetailsModalOpen(false);
     } catch (error) {
-      setError('Failed to approve loan. Please try again.');
+      setError(error.message || 'Failed to approve loan. Please try again.');
     } finally {
       setProcessingLoanId(null);
     }
@@ -80,7 +82,7 @@ const AdminApprovals = () => {
       setSuccess('Loan rejected successfully!');
       setIsDetailsModalOpen(false);
     } catch (error) {
-      setError('Failed to reject loan. Please try again.');
+      setError(error.message || 'Failed to reject loan. Please try again.');
     } finally {
       setProcessingLoanId(null);
     }
@@ -130,13 +132,29 @@ const AdminApprovals = () => {
     );
   }
 
+  // Debug information
+  console.log("Pending Approvals:", pendingApprovals);
+  
+  // Use effect to refresh approvals when component mounts
+  useEffect(() => {
+    refreshPendingApprovals();
+  }, []);
+  
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Loan Approvals</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Review and manage pending loan applications
-        </p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Loan Approvals</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Review and manage pending loan applications ({pendingApprovals.length})
+          </p>
+        </div>
+        <button
+          onClick={refreshPendingApprovals}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+        >
+          Refresh Approvals
+        </button>
       </div>
 
       {error && (
@@ -298,7 +316,7 @@ const AdminApprovals = () => {
                           {loan.type} Loan
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          ${loan.amount.toLocaleString()}
+                          ${loan.amount ? loan.amount.toLocaleString() : '0'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {loan.createdAt}
@@ -316,8 +334,9 @@ const AdminApprovals = () => {
                             <button
                               type="button"
                               onClick={() => handleApproveLoan(loan.id)}
-                              disabled={processingLoanId === loan.id}
-                              className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                              disabled={processingLoanId === loan.id || loan.userId === currentUser?.id}
+                              className={`${loan.userId === currentUser?.id ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-900'} disabled:opacity-50`}
+                              title={loan.userId === currentUser?.id ? "You cannot approve your own loan" : "Approve loan"}
                             >
                               {processingLoanId === loan.id ? (
                                 <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -332,8 +351,9 @@ const AdminApprovals = () => {
                             <button
                               type="button"
                               onClick={() => handleRejectLoan(loan.id)}
-                              disabled={processingLoanId === loan.id}
-                              className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                              disabled={processingLoanId === loan.id || loan.userId === currentUser?.id}
+                              className={`${loan.userId === currentUser?.id ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'} disabled:opacity-50`}
+                              title={loan.userId === currentUser?.id ? "You cannot reject your own loan" : "Reject loan"}
                             >
                               {processingLoanId === loan.id ? (
                                 <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -424,32 +444,32 @@ const AdminApprovals = () => {
                       
                       <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 rounded-lg">
                         <dt className="text-sm font-medium text-gray-500">Loan Amount</dt>
-                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">${selectedLoan.amount.toLocaleString()}</dd>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">${selectedLoan.amount ? selectedLoan.amount.toLocaleString() : '0'}</dd>
                       </div>
                       
                       <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt className="text-sm font-medium text-gray-500">Term</dt>
-                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.term} months</dd>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.term ? `${selectedLoan.term} months` : 'Not specified'}</dd>
                       </div>
                       
                       <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 rounded-lg">
                         <dt className="text-sm font-medium text-gray-500">Interest Rate</dt>
-                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.interestRate}%</dd>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.interestRate ? `${selectedLoan.interestRate}%` : 'Not specified'}</dd>
                       </div>
                       
                       <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt className="text-sm font-medium text-gray-500">Purpose</dt>
-                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.purpose}</dd>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.purpose || 'Not specified'}</dd>
                       </div>
                       
                       <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 rounded-lg">
                         <dt className="text-sm font-medium text-gray-500">Credit Score</dt>
-                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.creditScore}</dd>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{selectedLoan.creditScore || 'Not provided'}</dd>
                       </div>
                       
                       <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt className="text-sm font-medium text-gray-500">Annual Income</dt>
-                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">${selectedLoan.income.toLocaleString()}</dd>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">${selectedLoan.income ? selectedLoan.income.toLocaleString() : 'Not provided'}</dd>
                       </div>
                       
                       <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 rounded-lg">
@@ -460,21 +480,25 @@ const AdminApprovals = () => {
                       <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt className="text-sm font-medium text-gray-500">Documents</dt>
                         <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                          <ul className="border border-gray-200 rounded-md divide-y divide-gray-200">
-                            {selectedLoan.documents.map((document, index) => (
-                              <li key={index} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
-                                <div className="w-0 flex-1 flex items-center">
-                                  <DocumentDownloadIcon className="flex-shrink-0 h-5 w-5 text-gray-400" aria-hidden="true" />
-                                  <span className="ml-2 flex-1 w-0 truncate">{document}</span>
-                                </div>
-                                <div className="ml-4 flex-shrink-0">
-                                  <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
-                                    View
-                                  </a>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
+                          {selectedLoan.documents && selectedLoan.documents.length > 0 ? (
+                            <ul className="border border-gray-200 rounded-md divide-y divide-gray-200">
+                              {selectedLoan.documents.map((document, index) => (
+                                <li key={index} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
+                                  <div className="w-0 flex-1 flex items-center">
+                                    <DocumentDownloadIcon className="flex-shrink-0 h-5 w-5 text-gray-400" aria-hidden="true" />
+                                    <span className="ml-2 flex-1 w-0 truncate">{document}</span>
+                                  </div>
+                                  <div className="ml-4 flex-shrink-0">
+                                    <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
+                                      View
+                                    </a>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-gray-500">No documents provided</span>
+                          )}
                         </dd>
                       </div>
                     </div>
